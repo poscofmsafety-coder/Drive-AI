@@ -46,14 +46,12 @@ type AIResult = {
 };
 
 const TMAP_API_KEY = process.env.TMAP_API_KEY;
-const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID;
-const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
 
 type BlogPost = {
   title: string;
   link: string;
   description: string;
-  bloggername: string;
+  regionKeywords: string[];
 };
 
 /* ==================================================
@@ -75,52 +73,104 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function stripHtml(text: string) {
-  return text.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
-}
-
 /* ==================================================
-   네이버 블로그 검색 (실제 드라이브 후기 데이터를 AI 참고자료 + 사용자 노출 링크로 사용)
+   인기 드라이브 코스 블로그 큐레이션 (실제 검색으로 확인한 글들, 수동 관리)
+   네이버 검색 API 없이도 "실제로 많이 언급되는 코스" 참고자료를 제공하기 위한 정적 데이터입니다.
+   새로운 글을 추가하려면 아래 배열에 항목을 추가하세요.
 ================================================== */
 
-async function searchNaverBlogs(query: string, display = 5): Promise<BlogPost[]> {
-  if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) return [];
+const CURATED_DRIVE_BLOGS: BlogPost[] = [
+  {
+    title: "한국의 아름다운 드라이브 코스 8곳 - Go Guides",
+    link: "https://kr.hotels.com/go/south-korea/road-trips-korea",
+    description:
+      "강릉 헌화로, 서울 북악스카이웨이, 서해 백수해안도로 등 전국 대표 드라이브 도로를 소개하는 종합 가이드.",
+    regionKeywords: ["강릉", "동해", "강원", "서울", "북악", "서해", "영광"],
+  },
+  {
+    title: "시원한 바람 맞으며 떠나는 국내 해변 드라이브 코스 - 미쉐린 블로그",
+    link: "https://www.michelin.co.kr/blog/articles/summer-beach-drives-vehicle-check",
+    description:
+      "삼척 새천년해안도로, 고흥 거금 해안경관길, 태안 꽃지해수욕장 등 해안 드라이브 코스와 주변 명소 정리.",
+    regionKeywords: ["삼척", "동해", "강원", "고흥", "전남", "태안", "충남", "서해"],
+  },
+  {
+    title: "남해안 추천 드라이브 코스 - Triple",
+    link: "https://triple.guide/articles/1725b568-2403-4e30-91e1-130a13bc35be",
+    description:
+      "통영, 거제, 남해를 잇는 남해안 대표 해안 도로와 가천 다랭이마을 등 주요 뷰포인트 소개.",
+    regionKeywords: ["남해", "통영", "거제", "경남", "다랭이"],
+  },
+  {
+    title: "남해 드라이브 코스 완벽 가이드",
+    link: "https://love.kkokkori.com/entry/%EB%82%A8%ED%95%B4-%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B8%8C-%EC%BD%94%EC%8A%A4-%EC%99%84%EB%B2%BD-%EA%B0%80%EC%9D%B4%EB%93%9C",
+    description:
+      "남해대교, 해안도로, 일몰 명소, 드라이브 맛집까지 남해 드라이브 코스를 테마별로 정리한 가이드.",
+    regionKeywords: ["남해", "경남", "남해대교"],
+  },
+  {
+    title: "차창 밖 빛나는 노을! 서해안 드라이브 코스 BEST 3 - 대한민국 구석구석",
+    link: "https://korean.visitkorea.or.kr/detail/rem_detail.do?cotid=dc38b3af-42ad-4bc7-9633-6eb234ffe62d",
+    description: "영종도, 새만금방조제, 대부도 등 노을이 아름다운 서해안 드라이브 코스 3선.",
+    regionKeywords: ["영종도", "인천", "군산", "새만금", "대부도", "서해", "경기"],
+  },
+  {
+    title: "강원 네이처로드 - 바다 드라이브길 - 대한민국 구석구석",
+    link: "https://korean.visitkorea.or.kr/static/coalition/ganwonnr/course06.html",
+    description: "강원 동해안을 따라가는 공식 추천 드라이브 코스로 경포대, 촛대바위 등을 경유.",
+    regionKeywords: ["강원", "동해", "속초", "강릉", "경포"],
+  },
+  {
+    title: "제주도 드라이브 코스 추천 BEST 8 - 여행톡톡",
+    link: "https://v.daum.net/v/4rV6rT3o5f",
+    description:
+      "신창풍차 해안도로, 애월 해안도로, 도두 무지개 해안도로 등 제주 동서 해안 드라이브 코스 8선.",
+    regionKeywords: ["제주", "애월", "신창"],
+  },
+  {
+    title: "드라이브하기 좋은 해안 도로 (제주) - Triple",
+    link: "https://triple.guide/articles/d68641b1-b0b6-487c-ae72-d8f570310f79",
+    description: "산방산-송악산 해안도로, 광치기-하도 해안도로 등 제주 해안 드라이브 코스 7선.",
+    regionKeywords: ["제주", "산방산", "성산", "송악산"],
+  },
+  {
+    title: "서울 근교 드라이브 코스 BEST 7 - KKday",
+    link: "https://www.kkday.com/ko/blog/13359/asia-korea-seoul-suburbs-drive-course",
+    description: "영종도, 파주 마장호수, 대부도 탄도항 등 서울에서 당일치기로 다녀올 수 있는 드라이브 코스.",
+    regionKeywords: ["서울", "경기", "파주", "인천", "마장호수", "대부도"],
+  },
+  {
+    title: "주말에 가기 좋은 드라이브 추천 코스 - Triple",
+    link: "https://triple.guide/articles/c984f420-3d87-4cc2-a22a-fb4aba4871eb",
+    description: "궁평항, 매향리 방조제, 남한산성 등 경기권 주말 드라이브 코스 정리.",
+    regionKeywords: ["경기", "화성", "안산", "궁평항", "남한산성"],
+  },
+  {
+    title: "자동차로 떠나는 국내 드라이브 여행 코스 BEST 10",
+    link: "https://allroundtip.com/blog/domestic-drive-course-best10/",
+    description:
+      "강릉 동해안, 부산 달맞이길, 남해 해안국도, 가평 팔당호, 대관령, 담양 메타세쿼이아길 등 전국 드라이브 명소 종합 정리.",
+    regionKeywords: ["부산", "달맞이", "가평", "대관령", "무주", "대구", "팔공산", "담양"],
+  },
+];
 
-  try {
-    const params = new URLSearchParams({
-      query,
-      display: String(display),
-      sort: "sim", // 정확도순
-    });
+function findRelevantBlogs(text: string, limit = 4): BlogPost[] {
+  const scored = CURATED_DRIVE_BLOGS.map((blog) => {
+    const score = blog.regionKeywords.reduce(
+      (count, keyword) => count + (text.includes(keyword) ? 1 : 0),
+      0
+    );
+    return { blog, score };
+  }).filter((item) => item.score > 0);
 
-    const response = await fetch(`https://openapi.naver.com/v1/search/blog.json?${params.toString()}`, {
-      headers: {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
-        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    });
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((item) => item.blog);
+}
 
-    if (!response.ok) {
-      console.log("[recommend] 네이버 블로그 검색 HTTP 오류:", response.status, query);
-      return [];
-    }
-
-    const data = await response.json();
-    const items = data?.items;
-    if (!Array.isArray(items)) return [];
-
-    return items.map((item: any) => ({
-      title: stripHtml(item.title || ""),
-      link: item.link || "",
-      description: stripHtml(item.description || ""),
-      bloggername: item.bloggername || "",
-    }));
-  } catch (error) {
-    console.log("[recommend] 네이버 블로그 검색 오류:", query, error);
-    return [];
-  }
+function findBlogForPlace(placeName: string, addressName: string): BlogPost | null {
+  const text = `${placeName} ${addressName}`;
+  const matches = findRelevantBlogs(text, 1);
+  return matches[0] || null;
 }
 
 async function searchTmapPOI(query: string, count = 5): Promise<Place[]> {
@@ -557,22 +607,17 @@ export async function POST(request: Request) {
     const currentRegion = await getCurrentRegion(body.latitude, body.longitude);
 
     /* ------------------------------
-       0) 네이버 블로그에서 관련 드라이브 후기 검색 (AI 참고자료)
+       0) 큐레이션된 인기 드라이브 블로그에서 관련 글 매칭 (AI 참고자료, API 호출 없음)
     ------------------------------ */
 
     let blogContext = "";
-    if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET) {
-      const blogQuery = `${currentRegion} ${query} 드라이브 코스`.trim();
-      const blogs = await searchNaverBlogs(blogQuery, 6);
+    const matchedBlogs = findRelevantBlogs(`${currentRegion} ${query}`, 4);
 
-      if (blogs.length > 0) {
-        blogContext = blogs
-          .map((b, i) => `${i + 1}. [${b.title}] ${b.description}`)
-          .join("\n");
-        console.log(`[recommend] 네이버 블로그 참고자료 ${blogs.length}건 확보`);
-      } else {
-        console.log("[recommend] 네이버 블로그 검색 결과 없음:", blogQuery);
-      }
+    if (matchedBlogs.length > 0) {
+      blogContext = matchedBlogs
+        .map((b, i) => `${i + 1}. [${b.title}] ${b.description}`)
+        .join("\n");
+      console.log(`[recommend] 큐레이션 블로그 매칭 ${matchedBlogs.length}건`);
     }
 
     /* ------------------------------
@@ -610,7 +655,7 @@ ${query}
 ${routeType === "왕복" ? `→ 이동+관광을 포함해 왕복으로 총 ${durationHours}시간을 쓸 수 있음. 편도 이동시간은 대략 ${Math.max(15, Math.round((durationHours * 60) / 2.5))}분 전후를 목표로 할 것.` : `→ 편도로 최대 ${durationHours}시간(${durationHours * 60}분)까지 이동 가능. 목표 편도 이동시간은 대략 ${Math.max(15, Math.round(durationHours * 60 * 0.7))}분 전후로 할 것.`}
 ${
   blogContext
-    ? `\n[참고: 실제 네이버 블로그 드라이브 후기 검색 결과]\n${blogContext}\n\n위 블로그들에서 실제로 언급되는 구체적인 명소/코스가 있다면 최대한 우선적으로 활용할 것 (블로그에 많이 언급된다는 건 실제로 검증된 인기 드라이브 코스라는 뜻).\n`
+    ? `\n[참고: 실제로 많이 언급되는 인기 드라이브 코스 블로그 정보]\n${blogContext}\n\n위 블로그들에서 실제로 언급되는 구체적인 명소/코스가 있다면 최대한 우선적으로 활용할 것 (실제로 검증된 인기 드라이브 코스라는 뜻).\n`
     : ""
 }
 규칙:
@@ -708,8 +753,7 @@ ${
       const nearbyRestaurants = await searchNearby(destLat, destLng, "맛집 식당");
       if (!TMAP_API_KEY) await sleep(1100);
 
-      const relatedBlogs = await searchNaverBlogs(`${destination.place_name} 드라이브`, 1);
-      const blogPost = relatedBlogs[0] || null;
+      const blogPost = findBlogForPlace(destination.place_name, destination.address_name);
 
       let estimatedDistanceKm: number | null = null;
       let estimatedMinutes: number | null = null;
