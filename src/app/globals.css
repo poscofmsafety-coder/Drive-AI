@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  overflow: hidden;
+  background: #f5f6f8;
+  color: #191919;
+  font-family: Arial, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+input,
+select {
+  outline: none;
+}
+
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  background: #e9edf1;
+  font-family: Arial, "Noto Sans KR", sans-serif;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+.leaflet-popup-content {
+  margin: 13px 15px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  body {
+    overflow: auto;
+  }
+}
